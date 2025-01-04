@@ -62,6 +62,11 @@ ootCSListCommands = [
     "CS_CAM_SPLINE_LIST",
     "CS_TRANSITION_LIST",
     "CS_DESTINATION_LIST",
+    "CS_MOTION_BLUR_LIST",
+    "CS_MODIFY_SEQ_LIST",
+    "CS_CHOOSE_CREDITS_SCENES_LIST",
+    "CS_TRANSITION_GENERAL_LIST",
+    "CS_GIVE_TATL_LIST",
 ]
 
 ootCSListEntryCommands = [
@@ -96,6 +101,11 @@ ootCSListEntryCommands = [
     "CS_TEXT_TYPE_3",
     "CS_TEXT_BOSSES_REMAINS",
     "CS_TEXT_ALL_NORMAL_MASKS",
+    "CS_MOTION_BLUR",
+    "CS_MODIFY_SEQ",
+    "CS_CHOOSE_CREDITS_SCENES",
+    "CS_TRANSITION_GENERAL",
+    "CS_GIVE_TATL",
 ]
 
 ootCSSingleCommands = [

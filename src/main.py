@@ -25,7 +25,9 @@ def main():
         raise ValueError("ERROR: No cutscenes found!")
 
     for cutscene in cs_list:
-        print(cutscene.name)
+        for sceneList in cutscene.creditsSceneList:
+            for entry in sceneList.entries:
+                print(cutscene.name, entry.type)
 
 
 if __name__ == "__main__":
