@@ -46,7 +46,6 @@ ootCSListCommands = [
     "CS_CAM_AT_SPLINE_REL_TO_PLAYER",
     "CS_CAM_EYE",
     "CS_CAM_AT",
-    "CS_CAM_SPLINE_LIST",
     "CS_MISC_LIST",
     "CS_LIGHT_SETTING_LIST",
     "CS_RUMBLE_CONTROLLER_LIST",
@@ -59,16 +58,16 @@ ootCSListCommands = [
     "CS_PLAY_BGM_LIST",
     "CS_STOP_BGM_LIST",
     "CS_LIGHTING_LIST",
+    # new
+    "CS_CAM_SPLINE_LIST",
+    "CS_TRANSITION_LIST",
+    "CS_DESTINATION_LIST",
 ]
 
 ootCSListEntryCommands = [
     "CS_ACTOR_CUE",
     "CS_PLAYER_CUE",
     "CS_CAM_POINT",
-    "CS_CAM_POINT_NEW",
-    "CS_CAM_MISC",
-    "CS_CAM_END",
-    "CS_CAM_SPLINE",
     "CS_MISC",
     "CS_LIGHT_SETTING",
     "CS_RUMBLE_CONTROLLER",
@@ -87,11 +86,22 @@ ootCSListEntryCommands = [
     "L_CS_LIGHT_SETTING",
     "L_CS_START_SEQ",
     "L_CS_STOP_SEQ",
+    # new
+    "CS_CAM_POINT_NEW",
+    "CS_CAM_MISC",
+    "CS_CAM_END",
+    "CS_CAM_SPLINE", # technically a list but treating it as an entry
+    "CS_TEXT_DEFAULT",
+    "CS_TEXT_TYPE_1",
+    "CS_TEXT_TYPE_3",
+    "CS_TEXT_BOSSES_REMAINS",
+    "CS_TEXT_ALL_NORMAL_MASKS",
 ]
 
 ootCSSingleCommands = [
     "CS_HEADER",
     "CS_END_OF_SCRIPT",
+    # note: `CutsceneImport.correct_command_lists()` can move these ones in `ootCSListEntryCommands`
     "CS_TRANSITION",
     "CS_DESTINATION",
 ]

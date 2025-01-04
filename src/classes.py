@@ -23,7 +23,7 @@ def getInteger(number: str):
     if number.startswith("0x"):
         number = number.removeprefix("0x")
 
-        # ``"0" * (8 - len(number)`` adds the missing zeroes (if necessary) to have a 8 digit hex number
+        # `"0" * (8 - len(number)` adds the missing zeroes (if necessary) to have a 8 digit hex number
         return unpack("!i", bytes.fromhex("0" * (8 - len(number)) + number))[0]
     else:
         return int(number)
@@ -34,7 +34,7 @@ def getRotation(data: str):
 
     if "DEG_TO_BINANG" in data or not "0x" in data:
         angle = float(data.split("(")[1].removesuffix(")") if "DEG_TO_BINANG" in data else data)
-        binang = int(angle * (0x8000 / 180.0))  # from ``DEG_TO_BINANG()`` in decomp
+        binang = int(angle * (0x8000 / 180.0))  # from `DEG_TO_BINANG()` in decomp
 
         # if the angle value is higher than 0xFFFF it means we're at 360 degrees
         return f"0x{0xFFFF if binang > 0xFFFF else binang:04X}"
@@ -46,10 +46,10 @@ def cs_import_float(v_str: str):
     return float(v_str.removesuffix("f"))
 
 
-# NOTE: ``paramNumber`` is the expected number of parameters inside the parsed commands,
-# this account for the unused parameters. Every classes are based on the commands arguments from ``z64cutscene_commands.h``
+# NOTE: `paramNumber` is the expected number of parameters inside the parsed commands,
+# this account for the unused parameters. Every classes are based on the commands arguments from `z64cutscene_commands.h`
 
-# fast64 doesn't need this
+# note: fast64 doesn't need this
 new_cs_system = False
 
 @dataclass
@@ -67,7 +67,7 @@ class CutsceneCmdBase:
     def getEnumValue(self, enumKey: str, index: int, isSeqLegacy: bool = False):
         global new_cs_system
 
-        if new_cs_system and enumKey not in {"seqId"}:
+        if new_cs_system and enumKey not in {"seqId", "destinationType", "ocarinaSongActionId"}:
             enumKey = enumKey[2].lower() + enumKey[3:]
 
         enum = mm_data.enum_data.enum_by_key[enumKey] if new_cs_system else oot_data.enumData.enumByKey[enumKey]
@@ -167,7 +167,7 @@ class CutsceneCmdCamSplineList(CutsceneCmdBase):
     num_bytes: Optional[int] = None
     entries: list[CutsceneCmdCamSpline] = field(default_factory=list)
     paramNumber: int = 1
-    listName: str = "camSplineList"
+    listName: str = "camSplineListNew"
     size: int = 0x8
 
     def __post_init__(self):
@@ -320,7 +320,7 @@ class CutsceneCmdCamAT(CutsceneCmdBase):
 class CutsceneCmdMisc(CutsceneCmdBase):
     """This class contains a single misc command entry"""
 
-    type: Optional[str] = None  # see ``CutsceneMiscType`` in decomp
+    type: Optional[str] = None  # see `CutsceneMiscType` in decomp
     paramNumber: int = 14
 
     def __post_init__(self):
@@ -360,6 +360,20 @@ class CutsceneCmdTransition(CutsceneCmdBase):
 
 
 @dataclass
+class CutsceneCmdTransitionList(CutsceneCmdBase):
+    """This class contains Transition list command data"""
+
+    entryTotal: Optional[int] = None
+    entries: list[CutsceneCmdTransition] = field(default_factory=list)
+    paramNumber: int = 1
+    listName: str = "transitionListNew"
+
+    def __post_init__(self):
+        if self.params is not None:
+            self.entryTotal = getInteger(self.params[0])
+
+
+@dataclass
 class CutsceneCmdText(CutsceneCmdBase):
     """This class contains Text command data"""
 
@@ -376,8 +390,8 @@ class CutsceneCmdText(CutsceneCmdBase):
             self.endFrame = getInteger(self.params[2])
             self.textId = getInteger(self.params[0])
             self.type = self.getEnumValue("csTextType", 3)
-            self.altTextId1 = (getInteger(self.params[4]),)
-            self.altTextId2 = (getInteger(self.params[5]),)
+            self.altTextId1 = getInteger(self.params[4])
+            self.altTextId2 = getInteger(self.params[5])
 
 
 @dataclass
@@ -411,11 +425,47 @@ class CutsceneCmdTextOcarinaAction(CutsceneCmdBase):
 
 
 @dataclass
+class CutsceneCmdTextGeneric(CutsceneCmdBase):
+    """This class contains generic text command data"""
+
+    textId: Optional[int] = None
+    topOptionBranch: Optional[int] = None
+    bottomOptionBranch: Optional[int] = None
+    paramNumber: int = 5
+    id: str = "Generic"
+
+    def __post_init__(self):
+        if self.params is not None:
+            self.textId = getInteger(self.params[0])
+            self.startFrame = getInteger(self.params[1])
+            self.endFrame = getInteger(self.params[2])
+            self.topOptionBranch = getInteger(self.params[3])
+            self.bottomOptionBranch = getInteger(self.params[4])
+
+
+@dataclass
+class CutsceneCmdTextMask(CutsceneCmdBase):
+    """This class contains mask/remains text command data"""
+
+    defaultTextId: Optional[int] = None
+    alternativeTextId: Optional[int] = None
+    paramNumber: int = 4
+    id: str = "Mask"
+
+    def __post_init__(self):
+        if self.params is not None:
+            self.defaultTextId = getInteger(self.params[0])
+            self.startFrame = getInteger(self.params[1])
+            self.endFrame = getInteger(self.params[2])
+            self.alternativeTextId = getInteger(self.params[3])
+
+
+@dataclass
 class CutsceneCmdTextList(CutsceneCmdBase):
     """This class contains Text List command data"""
 
     entryTotal: Optional[int] = None
-    entries: list[CutsceneCmdText | CutsceneCmdTextNone | CutsceneCmdTextOcarinaAction] = field(default_factory=list)
+    entries: list[CutsceneCmdText | CutsceneCmdTextNone | CutsceneCmdTextOcarinaAction | CutsceneCmdTextGeneric | CutsceneCmdTextMask] = field(default_factory=list)
     paramNumber: int = 1
     listName: str = "textList"
 
@@ -586,8 +636,24 @@ class CutsceneCmdDestination(CutsceneCmdBase):
 
     def __post_init__(self):
         if self.params is not None:
-            self.id = self.getEnumValue("csDestination", 0)
+            global new_cs_system
+
+            self.id = self.getEnumValue("destinationType" if new_cs_system else "csDestination", 0)
             self.startFrame = getInteger(self.params[1])
+
+
+@dataclass
+class CutsceneCmdDestinationList(CutsceneCmdBase):
+    """This class contains Destination list command data"""
+
+    entryTotal: Optional[int] = None
+    entries: list[CutsceneCmdTransition] = field(default_factory=list)
+    paramNumber: int = 1
+    listName: str = "destinationListNew"
+
+    def __post_init__(self):
+        if self.params is not None:
+            self.entryTotal = getInteger(self.params[0])
 
 
 @dataclass
@@ -608,15 +674,19 @@ class Cutscene:
     camATSplineRelPlayerList: list[CutsceneCmdCamATSplineRelToPlayer] = field(default_factory=list)
     camEyeList: list[CutsceneCmdCamEye] = field(default_factory=list)
     camATList: list[CutsceneCmdCamAT] = field(default_factory=list)
-    camSplineList: list[CutsceneCmdCamSplineList] = field(default_factory=list)
     textList: list[CutsceneCmdTextList] = field(default_factory=list)
     miscList: list[CutsceneCmdMiscList] = field(default_factory=list)
     rumbleList: list[CutsceneCmdRumbleControllerList] = field(default_factory=list)
-    transitionList: list[CutsceneCmdTransition] = field(default_factory=list)
+    transitionList: list[CutsceneCmdTransition] = field(default_factory=list) 
     lightSettingsList: list[CutsceneCmdLightSettingList] = field(default_factory=list)
     timeList: list[CutsceneCmdTimeList] = field(default_factory=list)
     seqList: list[CutsceneCmdStartStopSeqList] = field(default_factory=list)
     fadeSeqList: list[CutsceneCmdFadeSeqList] = field(default_factory=list)
+
+    # lists from the new cutscene system
+    camSplineListNew: list[CutsceneCmdCamSplineList] = field(default_factory=list)
+    transitionListNew: list[CutsceneCmdTransitionList] = field(default_factory=list)
+    destinationListNew: list[CutsceneCmdDestinationList] = field(default_factory=list)
 
 
 cmdToClass = {
@@ -651,10 +721,18 @@ cmdToClass = {
     "CS_ACTOR_CUE_LIST": CutsceneCmdActorCueList,
     "CS_PLAYER_CUE_LIST": CutsceneCmdActorCueList,
     "CS_DESTINATION": CutsceneCmdDestination,
+    # commands from the new cutscene system
     "CS_CAM_SPLINE_LIST": CutsceneCmdCamSplineList,
     "CS_CAM_SPLINE": CutsceneCmdCamSpline,
     "CS_CAM_POINT_NEW": CutsceneCmdNewCamPoint,
     "CS_CAM_MISC": CutsceneCmdCamMisc,
+    "CS_TRANSITION_LIST": CutsceneCmdTransitionList,
+    "CS_DESTINATION_LIST": CutsceneCmdDestinationList,
+    "CS_TEXT_DEFAULT": CutsceneCmdTextGeneric,
+    "CS_TEXT_TYPE_1": CutsceneCmdTextGeneric,
+    "CS_TEXT_TYPE_3": CutsceneCmdTextGeneric,
+    "CS_TEXT_BOSSES_REMAINS": CutsceneCmdTextMask,
+    "CS_TEXT_ALL_NORMAL_MASKS": CutsceneCmdTextMask,
 }
 
 @dataclass
@@ -662,7 +740,7 @@ class ParsedCutscene:
     """Local class used to order the parsed cutscene properly"""
 
     csName: str
-    csData: list[str]  # contains every command lists or standalone ones like ``CS_TRANSITION()``
+    csData: list[str]  # contains every command lists or standalone ones like `CS_TRANSITION()`
 
 
 @dataclass
@@ -673,11 +751,21 @@ class CutsceneImport:
     version: str
     new_cs_system: bool
 
+    def correct_command_lists(self, command: str):
+        """If using the new cs system, moves standalone commands to the proper lists"""
+        if self.new_cs_system:
+            ootCSSingleCommands.remove(command)
+            ootCSListAndSingleCommands.remove(command)
+            ootCSListEntryCommands.append(command)
+
     def getParsedCutscenes(self):
         """Returns the parsed commands read from every cutscene we can find"""
 
         scene_dir = self.decomp_path.resolve()
         parsedCutscenes: list[ParsedCutscene] = []
+
+        self.correct_command_lists("CS_TRANSITION")
+        self.correct_command_lists("CS_DESTINATION")
 
         for dirpath, _, filenames in scene_dir.walk():
             for filename in filenames:
@@ -752,7 +840,7 @@ class CutsceneImport:
                             if "CutsceneData" in line:
                                 csName = line.split(" ")[1][:-2]
 
-                            # NOTE: ``CS_UNK_DATA()`` are commands that are completely useless, so we're ignoring those
+                            # NOTE: `CS_UNK_DATA()` are commands that are completely useless, so we're ignoring those
                             if csName is not None and not "CS_UNK_DATA" in curCmd:
                                 if curCmd in ootCutsceneCommandsC:
                                     line = line.removesuffix(",") + "\n"
@@ -773,18 +861,20 @@ class CutsceneImport:
                                             curCmdPrefix = curCmd[:-5]
 
                                     if curCmdPrefix is not None:
+                                        if "CS_TRANSITION" in curCmdPrefix:
+                                            pass
                                         if curCmdPrefix in curCmd:
                                             parsedData += line
                                         elif not cmdListFound and curCmd in ootCSListEntryCommands:
                                             print(f"{csName}, command:\n{line}")
-                                            raise ValueError(f"ERROR: Found a list entry outside a list inside ``{csName}``!")
+                                            raise ValueError(f"ERROR: Found a list entry outside a list inside `{csName}`!")
 
                                     if cmdListFound and nextCmd == "CS_END_OF_SCRIPT" or nextCmd in ootCSListAndSingleCommands:
                                         cmdListFound = False
                                         parsedCS.append(parsedData)
                                         parsedData = ""
                                 elif not "CutsceneData" in curCmd and not "};" in curCmd:
-                                    print(f"WARNING: Unknown command found: ``{curCmd}``")
+                                    print(f"WARNING: Unknown command found: `{curCmd}`")
                                     cmdListFound = False
                         parsedCutscenes.append(ParsedCutscene(csName, parsedCS))
 
@@ -793,10 +883,11 @@ class CutsceneImport:
     def getCmdParams(self, data: str, cmdName: str, paramNumber: int):
         """Returns the list of every parameter of the given command"""
 
+        # kinda hacky but better than duplicating the classes
         if self.new_cs_system:
-            if cmdName in {"CS_START_SEQ", "CS_LIGHT_SETTING"}:
+            if cmdName in {"CS_START_SEQ", "CS_FADE_OUT_SEQ", "CS_LIGHT_SETTING"}:
                 paramNumber = 3
-            elif cmdName == "CS_MISC":
+            elif cmdName in {"CS_MISC", "CS_STOP_SEQ"}:
                 paramNumber = 4
             elif cmdName == "CS_RUMBLE_CONTROLLER":
                 paramNumber = 6
@@ -866,6 +957,8 @@ class CutsceneImport:
                         else:
                             commandData = cmd(params)
 
+                        # treating camera commands separately if using the new cs commands
+                        # as it became more complex to parse since it's basically a list in a list in a list
                         if self.new_cs_system and "CAM" in cmdListName:
                             foundEndCmd = False
                             cur_point = 0
@@ -918,6 +1011,12 @@ class CutsceneImport:
                                 else:
                                     raise ValueError("ERROR: Invalid number of entries.")
                         elif cmdListName != "CS_TRANSITION" and cmdListName != "CS_DESTINATION":
+                            # this condition still works for both versions since the list name actually ends with "_LIST",
+                            # same thing in the next if/else block when it adds the data to the `Cutscene` class
+
+                            if cmdListName == "CS_DESTINATION_LIST":
+                                pass
+
                             foundEndCmd = False
                             for d in cmdData:
                                 cmdEntryName = d.strip().split("(")[0]
