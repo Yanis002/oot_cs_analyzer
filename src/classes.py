@@ -13,6 +13,7 @@ from constants import (
     ootCSListAndSingleCommands,
     ootCSLegacyToNewCmdNames,
     oot_data,
+    mm_data,
 )
 
 
@@ -48,6 +49,8 @@ def cs_import_float(v_str: str):
 # NOTE: ``paramNumber`` is the expected number of parameters inside the parsed commands,
 # this account for the unused parameters. Every classes are based on the commands arguments from ``z64cutscene_commands.h``
 
+# fast64 doesn't need this
+new_cs_system = False
 
 @dataclass
 class CutsceneCmdBase:
@@ -58,14 +61,22 @@ class CutsceneCmdBase:
     startFrame: Optional[int] = None
     endFrame: Optional[int] = None
 
+    # MM doesn't have startFrame and endFrame, instead it's just the framecount
+    duration: Optional[int] = None
+
     def getEnumValue(self, enumKey: str, index: int, isSeqLegacy: bool = False):
-        enum = oot_data.enumData.enumByKey[enumKey]
-        item = enum.itemById.get(self.params[index])
+        global new_cs_system
+
+        if new_cs_system and enumKey not in {"seqId"}:
+            enumKey = enumKey[2].lower() + enumKey[3:]
+
+        enum = mm_data.enum_data.enum_by_key[enumKey] if new_cs_system else oot_data.enumData.enumByKey[enumKey]
+        item = enum.item_by_id.get(self.params[index])
         if item is None:
             setting = getInteger(self.params[index])
             if isSeqLegacy:
                 setting -= 1
-            item = enum.itemByIndex.get(setting)
+            item = enum.item_by_index.get(setting)
         return item.key if item is not None else self.params[index]
 
 
@@ -87,6 +98,81 @@ class CutsceneCmdCamPoint(CutsceneCmdBase):
             self.frame = getInteger(self.params[2])
             self.viewAngle = cs_import_float(self.params[3])
             self.pos = [getInteger(self.params[4]), getInteger(self.params[5]), getInteger(self.params[6])]
+
+
+# MM's new camera commands
+
+@dataclass
+class CutsceneCmdNewCamPoint(CutsceneCmdBase):
+    """This class contains a single Camera Point command data (the newer version)"""
+
+    interp_type: Optional[str] = None
+    weight: Optional[int] = None
+    pos: list[int] = field(default_factory=list)
+    relative_to: Optional[str] = None
+    paramNumber: int = 7
+    size: int = 0xC
+
+    def __post_init__(self):
+        if self.params is not None:
+            self.interp_type = self.params[0]
+            self.weight = getInteger(self.params[1])
+            self.duration = getInteger(self.params[2])
+            self.pos = [getInteger(self.params[3]), getInteger(self.params[4]), getInteger(self.params[5])]
+            self.relative_to = self.params[6]
+
+
+@dataclass
+class CutsceneCmdCamMisc(CutsceneCmdBase):
+    """This class contains the Camera Misc data"""
+
+    camRoll: Optional[int] = None
+    viewAngle: Optional[float] = None
+    paramNumber: int = 4
+    size: int = 0x8
+
+    def __post_init__(self):
+        if self.params is not None:
+            self.camRoll = getInteger(self.params[1])
+            self.viewAngle = getInteger(self.params[2])
+
+
+@dataclass
+class CutsceneSplinePoint:
+    # this is not a real command but it helps as each camera point is made of one at, one eye and one misc
+    at: Optional[CutsceneCmdNewCamPoint] = None
+    eye: Optional[CutsceneCmdNewCamPoint] = None
+    misc: Optional[CutsceneCmdCamMisc] = None
+
+
+@dataclass
+class CutsceneCmdCamSpline(CutsceneCmdBase):
+    """This class contains the Camera Spline data"""
+
+    num_entries: Optional[int] = None
+    entries: list[CutsceneSplinePoint] = field(default_factory=list)
+    paramNumber: int = 4
+    size: int = 0x8
+
+    def __post_init__(self):
+        if self.params is not None:
+            self.num_entries = getInteger(self.params[0])
+            self.duration = getInteger(self.params[3])
+
+
+@dataclass
+class CutsceneCmdCamSplineList(CutsceneCmdBase):
+    """This class contains the Camera Spline list data"""
+
+    num_bytes: Optional[int] = None
+    entries: list[CutsceneCmdCamSpline] = field(default_factory=list)
+    paramNumber: int = 1
+    listName: str = "camSplineList"
+    size: int = 0x8
+
+    def __post_init__(self):
+        if self.params is not None:
+            self.num_bytes = getInteger(self.params[0])
 
 
 @dataclass
@@ -135,7 +221,12 @@ class CutsceneCmdActorCueList(CutsceneCmdBase):
                     self.commandType = self.commandType.removeprefix("0x")
                     self.commandType = "0x" + "0" * (4 - len(self.commandType)) + self.commandType
                 else:
-                    self.commandType = oot_data.enumData.enumByKey["csCmd"].itemById[self.commandType].key
+                    global new_cs_system
+
+                    if new_cs_system:
+                        self.commandType = mm_data.enum_data.enum_by_key["cmd"].item_by_id[self.commandType].key
+                    else:
+                        self.commandType = oot_data.enumData.enumByKey["csCmd"].item_by_id[self.commandType].key
                 self.entryTotal = getInteger(self.params[1].strip())
 
 
@@ -517,6 +608,7 @@ class Cutscene:
     camATSplineRelPlayerList: list[CutsceneCmdCamATSplineRelToPlayer] = field(default_factory=list)
     camEyeList: list[CutsceneCmdCamEye] = field(default_factory=list)
     camATList: list[CutsceneCmdCamAT] = field(default_factory=list)
+    camSplineList: list[CutsceneCmdCamSplineList] = field(default_factory=list)
     textList: list[CutsceneCmdTextList] = field(default_factory=list)
     miscList: list[CutsceneCmdMiscList] = field(default_factory=list)
     rumbleList: list[CutsceneCmdRumbleControllerList] = field(default_factory=list)
@@ -559,6 +651,10 @@ cmdToClass = {
     "CS_ACTOR_CUE_LIST": CutsceneCmdActorCueList,
     "CS_PLAYER_CUE_LIST": CutsceneCmdActorCueList,
     "CS_DESTINATION": CutsceneCmdDestination,
+    "CS_CAM_SPLINE_LIST": CutsceneCmdCamSplineList,
+    "CS_CAM_SPLINE": CutsceneCmdCamSpline,
+    "CS_CAM_POINT_NEW": CutsceneCmdNewCamPoint,
+    "CS_CAM_MISC": CutsceneCmdCamMisc,
 }
 
 @dataclass
@@ -575,16 +671,17 @@ class CutsceneImport:
 
     decomp_path: Path
     version: str
+    new_cs_system: bool
 
     def getParsedCutscenes(self):
         """Returns the parsed commands read from every cutscene we can find"""
 
-        scene_dir = self.decomp_path.resolve() / f"extracted/{self.version}/assets/scenes/"
+        scene_dir = self.decomp_path.resolve()
         parsedCutscenes: list[ParsedCutscene] = []
 
         for dirpath, _, filenames in scene_dir.walk():
             for filename in filenames:
-                if "_scene.c" in filename:
+                if "_scene.c" in filename or "_scene_cs_" in filename or filename == f"{dirpath.name}.c":
                     path = dirpath / filename
 
                     with path.open("r", encoding="utf-8") as file:
@@ -599,6 +696,11 @@ class CutsceneImport:
                     fileData = fileData.replace("CS_CMD_STOP", "CS_CAM_STOP")
                     for oldName in oldNames:
                         fileData = fileData.replace(f"{oldName}(", f"{ootCSLegacyToNewCmdNames[oldName]}(")
+
+                    # handle conflicts between the cs system of OoT and MM
+                    if self.new_cs_system:
+                        fileData = fileData.replace("CS_CAM_POINT", "CS_CAM_POINT_NEW")
+                        fileData = fileData.replace("CS_RUMBLE", "CS_RUMBLE_CONTROLLER")
 
                     fileLines: list[str] = []
                     for line in fileData.split("\n"):
@@ -691,6 +793,14 @@ class CutsceneImport:
     def getCmdParams(self, data: str, cmdName: str, paramNumber: int):
         """Returns the list of every parameter of the given command"""
 
+        if self.new_cs_system:
+            if cmdName in {"CS_START_SEQ", "CS_LIGHT_SETTING"}:
+                paramNumber = 3
+            elif cmdName == "CS_MISC":
+                paramNumber = 4
+            elif cmdName == "CS_RUMBLE_CONTROLLER":
+                paramNumber = 6
+
         parenthesis = "(" if not cmdName.endswith("(") else ""
         data = data.strip().removeprefix(f"{cmdName}{parenthesis}").replace(" ", "").removesuffix(")")
         if "CS_FLOAT" in data:
@@ -711,6 +821,9 @@ class CutsceneImport:
     
     def getCutsceneList(self):
         """Returns the list of cutscenes with the data processed"""
+
+        global new_cs_system
+        new_cs_system = self.new_cs_system
 
         parsedCutscenes = self.getParsedCutscenes()
 
@@ -753,7 +866,58 @@ class CutsceneImport:
                         else:
                             commandData = cmd(params)
 
-                        if cmdListName != "CS_TRANSITION" and cmdListName != "CS_DESTINATION":
+                        if self.new_cs_system and "CAM" in cmdListName:
+                            foundEndCmd = False
+                            cur_point = 0
+                            at_list: list[CutsceneCmdNewCamPoint] = []
+                            eye_list: list[CutsceneCmdNewCamPoint] = []
+                            misc_list: list[CutsceneCmdCamMisc] = []
+                            cur_spline_entry: Optional[CutsceneCmdCamSpline] = None
+                            for d in cmdData:
+                                cmdEntryName = d.strip().split("(")[0]
+
+                                if foundEndCmd:
+                                    raise ValueError("ERROR: More camera commands after last one!")
+
+                                if "CS_CAM_END" in d:
+                                    foundEndCmd = True
+                                    continue
+
+                                entryCmd = cmdToClass[cmdEntryName]
+                                params = self.getCmdParams(d, cmdEntryName, entryCmd.paramNumber)
+                                listEntry = entryCmd(params)
+
+                                if cmdEntryName == "CS_CAM_SPLINE":
+                                    cur_spline_entry = listEntry
+                                elif cur_spline_entry is not None:
+                                    sub_list_entry = cmdToClass[cmdEntryName]
+                                    sub_params = self.getCmdParams(d, cmdEntryName, sub_list_entry.paramNumber)
+
+                                    if cur_point < cur_spline_entry.num_entries:
+                                        at_list.append(sub_list_entry(sub_params))
+                                        cur_point += 1
+                                    elif cur_point < cur_spline_entry.num_entries * 2:
+                                        eye_list.append(sub_list_entry(sub_params))
+                                        cur_point += 1
+                                    elif cur_point < cur_spline_entry.num_entries * 3:
+                                        misc_list.append(sub_list_entry(sub_params))
+                                        cur_point += 1
+
+                                    if cur_point == cur_spline_entry.num_entries * 3:
+                                        assert len(at_list) == len(eye_list) == len(misc_list)
+
+                                        for at, eye, misc in zip(at_list, eye_list, misc_list):
+                                            cur_spline_entry.entries.append(CutsceneSplinePoint(at, eye, misc))
+
+                                        commandData.entries.append(cur_spline_entry)
+                                        cur_point = 0
+                                        at_list.clear()
+                                        eye_list.clear()
+                                        misc_list.clear()
+                                        cur_spline_entry = None
+                                else:
+                                    raise ValueError("ERROR: Invalid number of entries.")
+                        elif cmdListName != "CS_TRANSITION" and cmdListName != "CS_DESTINATION":
                             foundEndCmd = False
                             for d in cmdData:
                                 cmdEntryName = d.strip().split("(")[0]
